@@ -185,7 +185,7 @@ class SEOSafe_Elementor_Migrator
 			wp_send_json_error(array('message' => __('Missing parameters.', 'seo-safe-elementor-migrator')));
 		}
 
-		$api_url = trailingslashit($staging_url) . 'wp-json/wp/v2/pages/' . $staging_id . '?_fields=meta,content';
+		$api_url = trailingslashit($staging_url) . 'wp-json/wp/v2/pages/' . $staging_id . '?_fields=meta,content&context=edit';
 
 		$args = array(
 			'headers' => array(
@@ -237,15 +237,16 @@ class SEOSafe_Elementor_Migrator
 		if (isset($meta_payload['_wp_page_template']) && !empty($meta_payload['_wp_page_template'])) {
 			update_post_meta($local_id, '_wp_page_template', sanitize_text_field($meta_payload['_wp_page_template']));
 		} else {
-			// Fallback standard full-width layout for modern conversion setups
+			// Fallback standard full width layout for modern conversion setups
 			update_post_meta($local_id, '_wp_page_template', 'elementor_header_footer');
 		}
 
 		// 3. PURGE THE OLD WPBAKERY SHORTCODES FROM MAIN CONTENT STREAM
 		// Leaves rank_math_ fields completely untouched in wp_postmeta table.
+		$staging_content = $data['content']['raw'] ?? $data['content']['rendered'] ?? '';
 		wp_update_post(array(
-			'ID' => $local_id,
-			'post_content' => '',
+			'ID'           => $local_id,
+			'post_content' => $staging_content,
 		));
 
 		wp_send_json_success(array('message' => __('Success! WPBakery data cleared, new Elementor layout synced, and RankMath safely preserved. Reloading...', 'seo-safe-elementor-migrator')));
