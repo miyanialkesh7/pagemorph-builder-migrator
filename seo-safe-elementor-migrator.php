@@ -9,7 +9,10 @@
  * Text Domain:       seo-safe-elementor-migrator
  * Domain Path:       /languages
  * Requires at least: 6.0
+ * Tested up to:      7.0
  * Requires PHP:      7.4
+ * License:           GPL-2.0-or-later
+ * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  */
 
 if (!defined('ABSPATH')) {
@@ -118,7 +121,7 @@ class SEOSafe_Elementor_Migrator
 					var appUsername = $('#seosafe_app_username').val();
 					var appPassword = $('#seosafe_app_password').val();
 					var stagingPostId = $('#seosafe_staging_post_id').val();
-					var localPostId = '<?php echo esc_js($post->ID); ?>';
+					var localPostId = '<?php echo absint($post->ID); ?>';
 					var nonce = $('#seosafe_pull_nonce').val();
 
 					if (!stagingUrl || !appUsername || !appPassword || !stagingPostId) {
@@ -173,10 +176,10 @@ class SEOSafe_Elementor_Migrator
 		}
 
 		$staging_url = esc_url_raw(wp_unslash($_POST['staging_url'] ?? ''));
-		$username = sanitize_text_field($_POST['app_username'] ?? '');
-		$app_password = sanitize_text_field($_POST['app_password'] ?? '');
-		$staging_id = absint($_POST['staging_id'] ?? 0);
-		$local_id = absint($_POST['local_id'] ?? 0);
+		$username = sanitize_text_field(wp_unslash($_POST['app_username'] ?? ''));
+		$app_password = sanitize_text_field(wp_unslash($_POST['app_password'] ?? ''));
+		$staging_id = absint(wp_unslash($_POST['staging_id'] ?? 0));
+		$local_id = absint(wp_unslash($_POST['local_id'] ?? 0));
 
 		if (!$staging_url || !$username || !$app_password || !$staging_id || !$local_id) {
 			wp_send_json_error(array('message' => __('Missing parameters.', 'seo-safe-elementor-migrator')));
@@ -194,11 +197,13 @@ class SEOSafe_Elementor_Migrator
 		$response = wp_remote_get($api_url, $args);
 
 		if (is_wp_error($response)) {
+			/* translators: %s: Staging API error message details. */
 			wp_send_json_error(array('message' => sprintf(__('Staging API request failed: %s', 'seo-safe-elementor-migrator'), $response->get_error_message())));
 		}
 
 		$status_code = wp_remote_retrieve_response_code($response);
 		if (200 !== $status_code) {
+			/* translators: %d: HTTP status code. */
 			wp_send_json_error(array('message' => sprintf(__('Staging API returned status code %d. Verify your credentials and Page ID.', 'seo-safe-elementor-migrator'), $status_code)));
 		}
 
@@ -232,7 +237,7 @@ class SEOSafe_Elementor_Migrator
 		if (isset($meta_payload['_wp_page_template']) && !empty($meta_payload['_wp_page_template'])) {
 			update_post_meta($local_id, '_wp_page_template', sanitize_text_field($meta_payload['_wp_page_template']));
 		} else {
-			// Fallback standard full width layout for modern conversion setups
+			// Fallback standard full-width layout for modern conversion setups
 			update_post_meta($local_id, '_wp_page_template', 'elementor_header_footer');
 		}
 
@@ -311,13 +316,32 @@ class SEOSafe_Elementor_Migrator
 	 */
 	private function seosafe_get_attachment_id_by_filename($filename)
 	{
-		global $wpdb;
 		$filename = sanitize_file_name($filename);
-		$attachment_id = $wpdb->get_var($wpdb->prepare(
-			"SELECT post_id FROM $wpdb->postmeta WHERE meta_key = '_wp_attached_file' AND meta_value LIKE %s LIMIT 1",
-			'%' . $wpdb->esc_like($filename)
-		));
-		return $attachment_id ? intval($attachment_id) : false;
+
+		$args = array(
+			'post_type' => 'attachment',
+			'post_status' => 'inherit',
+			'posts_per_page' => 1,
+			'fields' => 'ids',
+			'meta_query' => array(
+				array(
+					'key' => '_wp_attached_file',
+					'value' => $filename,
+					'compare' => 'LIKE',
+				),
+			),
+			'no_found_rows' => true,
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
+		);
+
+		$attachments = get_posts($args);
+
+		if (!empty($attachments)) {
+			return intval($attachments[0]);
+		}
+
+		return false;
 	}
 
 }
