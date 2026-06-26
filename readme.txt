@@ -1,19 +1,20 @@
-=== SEO-Safe Elementor Migrator ===
+=== PageMorph Builder Migrator ===
 Contributors: alkesh7,techeshta, seljabhalala
 Donate link: https://miyanialkesh7.com
-Tags: elementor, rankmath, staging migration, page sync, elementor clone
+Tags: elementor, rankmath, staging migration, page sync, wpbakery
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Requires Plugins: elementor
+Stable tag: 1.0.1
 License: GPLv2 or later
-License URI: http://gnu.org
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
 Sync Elementor page layouts from staging to live sites. Safely keep RankMath SEO metadata, titles, and schemas while sideloading layout images.
 
 == Description ==
 
-**SEO-Safe Elementor Migrator** is a lightweight, secure developer tool built for WordPress designers, SEO specialists, and developers. 
+**PageMorph Builder Migrator** is a lightweight, secure developer tool built for WordPress designers, SEO specialists, and developers.
 
 Do you build and refine your designs on a staging environment while keeping your live site updated with active blogs, customer comments, and optimized RankMath SEO configurations? Standard WordPress migration plugins or manual exports overwrite the entire page metadata, destroying your hard-earned SEO rankings, custom schemas, focus keywords, and meta descriptions on the live site.
 
@@ -29,7 +30,7 @@ This plugin bridges that gap. By utilizing a secure, authenticated WordPress RES
 
 == Installation ==
 
-1. Upload the entire `seo-safe-elementor-migrator` folder to the `/wp-content/plugins/` directory, or install it directly via the WordPress Admin dashboard (**Plugins > Add New > Upload Plugin**).
+1. Upload the entire `pagemorph-builder-migrator` folder to the `/wp-content/plugins/` directory, or install it directly via the WordPress Admin dashboard (**Plugins > Add New > Upload Plugin**).
 2. Activate the plugin through the **Plugins** screen in WordPress.
 3. Ensure that **Elementor** is active on both the staging and live environments.
 
