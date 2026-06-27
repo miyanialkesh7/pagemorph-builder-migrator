@@ -15,7 +15,6 @@ jobs:
         with:
           generate-zip: true
           assets-dir: wordpress-org/assets
-          readme-name: wordpress-org/readme.txt
         env:
           SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
           SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
