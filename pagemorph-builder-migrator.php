@@ -3,7 +3,7 @@
  * Plugin Name:       PageMorph Builder Migrator
  * Plugin URI:        https://wordpress.org/plugins/pagemorph-builder-migrator/
  * Description:       Securely pulls Elementor layouts from a staging site into an existing live page built with WPBakery via the REST API. Automatically deactivates WPBakery data on the page, purges legacy shortcodes, sideloads media, and preserves RankMath SEO metadata completely untouched.
- * Version:           1.0.1
+ * Version:           1.0.2
  * Author:            Alkesh Miyani
  * Author URI:        https://miyanialkesh7.com
  * Text Domain:       pagemorph-builder-migrator

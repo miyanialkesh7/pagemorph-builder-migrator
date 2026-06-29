@@ -6,7 +6,7 @@ Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
 Requires Plugins: elementor
-Stable tag: 1.0.1
+Stable tag: 1.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -63,13 +63,18 @@ You do not need to install this plugin on your staging site. Simply go to your S
 
 == Changelog ==
 
+= 1.0.2 =
+Release date: June 29th, 2026
+
+* Improvements: Custom Post Type support added
+
+= 1.0.1 =
+Release date: June 27th, 2026
+
+* Fix: Minor issue fixes
+
 = 1.0.0 =
 * Initial public release.
-* Added Page-to-ID REST API synchronization interface.
-* Implemented selective Elementor metadata migration.
-* Implemented automated media library sideloading for remote layout images.
-* Implemented automated WordPress page revision backup prior to synchronization.
-* Added clean-up support for WPBakery/Classic Editor shortcodes.
 
 == Upgrade Notice ==
 
