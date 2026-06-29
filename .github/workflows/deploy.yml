@@ -14,7 +14,6 @@ jobs:
       - uses: 10up/action-wordpress-plugin-deploy@stable
         with:
           generate-zip: true
-          assets-dir: wordpress-org/assets
         env:
           SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
           SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
