@@ -34,18 +34,25 @@ class PageMorph_Builder_Migrator
 	}
 
 	/**
-	 * Register the Sidebar Meta Box on Pages.
+	 * Register the Sidebar Meta Box on supported post types.
 	 */
 	public function pagemorph_register_sync_meta_box()
 	{
-		add_meta_box(
-			'pagemorph_pull_box',
-			__('Staging Layout Sync', 'pagemorph-builder-migrator'),
-			array($this, 'pagemorph_render_meta_box_html'),
-			'page',
-			'side',
-			'high'
-		);
+		$supported_post_types = get_option('elementor_cpt_support', array('post', 'page'));
+		if (!is_array($supported_post_types)) {
+			$supported_post_types = array('post', 'page');
+		}
+
+		foreach ($supported_post_types as $post_type) {
+			add_meta_box(
+				'pagemorph_pull_box',
+				__('Staging Layout Sync', 'pagemorph-builder-migrator'),
+				array($this, 'pagemorph_render_meta_box_html'),
+				$post_type,
+				'side',
+				'high'
+			);
+		}
 	}
 
 	/**
@@ -79,7 +86,7 @@ class PageMorph_Builder_Migrator
 			</p>
 			<p>
 				<label
-					for="pagemorph_staging_post_id"><strong><?php esc_html_e('Staging Page ID (Elementor):', 'pagemorph-builder-migrator'); ?></strong></label>
+					for="pagemorph_staging_post_id"><strong><?php esc_html_e('Staging Post ID (Elementor):', 'pagemorph-builder-migrator'); ?></strong></label>
 				<input type="number" id="pagemorph_staging_post_id" class="all-options" min="1" placeholder="45" value="" />
 			</p>
 			<hr />
@@ -102,7 +109,16 @@ class PageMorph_Builder_Migrator
 		}
 
 		global $post;
-		if (!$post || 'page' !== $post->post_type) {
+		if (!$post) {
+			return;
+		}
+
+		$supported_post_types = get_option('elementor_cpt_support', array('post', 'page'));
+		if (!is_array($supported_post_types)) {
+			$supported_post_types = array('post', 'page');
+		}
+
+		if (!in_array($post->post_type, $supported_post_types, true)) {
 			return;
 		}
 
@@ -119,14 +135,14 @@ class PageMorph_Builder_Migrator
 			'pageMorphSyncData',
 			array(
 				'postId' => absint($post->ID),
-				'i18n'   => array(
-					'fillFields'    => __('Please fill out all staging credentials and the Page ID.', 'pagemorph-builder-migrator'),
-					'confirmPrompt' => __('Warning: This will overwrite your live layout, erase WPBakery settings for this page, and apply the Elementor design. RankMath SEO metadata is safely preserved. Proceed?', 'pagemorph-builder-migrator'),
-					'purging'       => __('Purging WPBakery & Overwriting...', 'pagemorph-builder-migrator'),
-					'connecting'    => __('Connecting to staging site API...', 'pagemorph-builder-migrator'),
-					'migrateBtn'    => __('Migrate Layout & Clear WPBakery', 'pagemorph-builder-migrator'),
-					'errorPrefix'   => __('Error: ', 'pagemorph-builder-migrator'),
-					'unknownError'  => __('An unknown execution error occurred.', 'pagemorph-builder-migrator'),
+				'i18n' => array(
+					'fillFields' => __('Please fill out all staging credentials and the Post ID.', 'pagemorph-builder-migrator'),
+					'confirmPrompt' => __('Warning: This will overwrite your live layout, erase WPBakery settings for this post, and apply the Elementor design. RankMath SEO metadata is safely preserved. Proceed?', 'pagemorph-builder-migrator'),
+					'purging' => __('Purging WPBakery & Overwriting...', 'pagemorph-builder-migrator'),
+					'connecting' => __('Connecting to staging site API...', 'pagemorph-builder-migrator'),
+					'migrateBtn' => __('Migrate Layout & Clear WPBakery', 'pagemorph-builder-migrator'),
+					'errorPrefix' => __('Error: ', 'pagemorph-builder-migrator'),
+					'unknownError' => __('An unknown execution error occurred.', 'pagemorph-builder-migrator'),
 				),
 			)
 		);
@@ -139,7 +155,19 @@ class PageMorph_Builder_Migrator
 	{
 		check_ajax_referer('pagemorph_pull_nonce_action', '_ajax_nonce');
 
-		if (!current_user_can('edit_pages')) {
+		$local_id = absint(wp_unslash($_POST['local_id'] ?? 0));
+		if (!$local_id) {
+			wp_send_json_error(array('message' => __('Missing parameters.', 'pagemorph-builder-migrator')));
+		}
+
+		$post_type = get_post_type($local_id);
+		$post_type_object = get_post_type_object($post_type);
+		if (!$post_type_object) {
+			wp_send_json_error(array('message' => __('Invalid post type.', 'pagemorph-builder-migrator')));
+		}
+
+		$edit_capability = $post_type_object->cap->edit_post;
+		if (!current_user_can($edit_capability, $local_id)) {
 			wp_send_json_error(array('message' => __('Insufficient permissions to perform this action.', 'pagemorph-builder-migrator')));
 		}
 
@@ -147,13 +175,31 @@ class PageMorph_Builder_Migrator
 		$username = sanitize_text_field(wp_unslash($_POST['app_username'] ?? ''));
 		$app_password = sanitize_text_field(wp_unslash($_POST['app_password'] ?? ''));
 		$staging_id = absint(wp_unslash($_POST['staging_id'] ?? 0));
-		$local_id = absint(wp_unslash($_POST['local_id'] ?? 0));
 
-		if (!$staging_url || !$username || !$app_password || !$staging_id || !$local_id) {
+		if (!$staging_url || !$username || !$app_password || !$staging_id) {
 			wp_send_json_error(array('message' => __('Missing parameters.', 'pagemorph-builder-migrator')));
 		}
 
-		$api_url = trailingslashit($staging_url) . 'wp-json/wp/v2/pages/' . $staging_id . '?_fields=meta,content&context=edit';
+		$rest_base = !empty($post_type_object->rest_base) ? $post_type_object->rest_base : $post_type;
+
+		$rest_bases_to_try = array($rest_base);
+		if ($rest_base !== 'pages') {
+			$rest_bases_to_try[] = 'pages';
+		}
+		if ($rest_base !== 'posts') {
+			$rest_bases_to_try[] = 'posts';
+		}
+
+		// Also try any other registered public post types' rest bases
+		$public_post_types = get_post_types(array('public' => true), 'objects');
+		if (is_array($public_post_types)) {
+			foreach ($public_post_types as $pt) {
+				$pb = !empty($pt->rest_base) ? $pt->rest_base : $pt->name;
+				if (!in_array($pb, $rest_bases_to_try, true)) {
+					$rest_bases_to_try[] = $pb;
+				}
+			}
+		}
 
 		$args = array(
 			'headers' => array(
@@ -162,17 +208,33 @@ class PageMorph_Builder_Migrator
 			'timeout' => 45,
 		);
 
-		$response = wp_remote_get($api_url, $args);
+		$response = null;
+		$status_code = 404;
+		$last_error_message = '';
 
-		if (is_wp_error($response)) {
-			/* translators: %s: Staging API error message details. */
-			wp_send_json_error(array('message' => sprintf(__('Staging API request failed: %s', 'pagemorph-builder-migrator'), $response->get_error_message())));
+		foreach ($rest_bases_to_try as $try_base) {
+			$api_url = trailingslashit($staging_url) . 'wp-json/wp/v2/' . $try_base . '/' . $staging_id . '?_fields=meta,content&context=edit';
+			$response = wp_remote_get($api_url, $args);
+
+			if (is_wp_error($response)) {
+				$last_error_message = $response->get_error_message();
+				continue;
+			}
+
+			$status_code = wp_remote_retrieve_response_code($response);
+			if (200 === $status_code) {
+				break;
+			}
 		}
 
-		$status_code = wp_remote_retrieve_response_code($response);
+		if (is_wp_error($response) && 200 !== $status_code) {
+			/* translators: %s: Staging API error message details. */
+			wp_send_json_error(array('message' => sprintf(__('Staging API request failed: %s', 'pagemorph-builder-migrator'), $last_error_message ?: $response->get_error_message())));
+		}
+
 		if (200 !== $status_code) {
 			/* translators: %d: HTTP status code. */
-			wp_send_json_error(array('message' => sprintf(__('Staging API returned status code %d. Verify your credentials and Page ID.', 'pagemorph-builder-migrator'), $status_code)));
+			wp_send_json_error(array('message' => sprintf(__('Staging API returned status code %d. Verify your credentials and Page/Post ID.', 'pagemorph-builder-migrator'), $status_code)));
 		}
 
 		$data = json_decode(wp_remote_retrieve_body($response), true);
@@ -213,7 +275,7 @@ class PageMorph_Builder_Migrator
 		// Leaves rank_math_ fields completely untouched in wp_postmeta table.
 		$staging_content = $data['content']['raw'] ?? $data['content']['rendered'] ?? '';
 		wp_update_post(array(
-			'ID'           => $local_id,
+			'ID' => $local_id,
 			'post_content' => $staging_content,
 		));
 
@@ -241,7 +303,7 @@ class PageMorph_Builder_Migrator
 			return;
 		}
 
-		$upload_dir    = wp_upload_dir();
+		$upload_dir = wp_upload_dir();
 		$css_file_path = $upload_dir['basedir'] . '/elementor/css/post-' . $post_id . '.css';
 
 		if (file_exists($css_file_path)) {
@@ -294,10 +356,10 @@ class PageMorph_Builder_Migrator
 		require_once ABSPATH . 'wp-admin/includes/image.php';
 
 		$url_remap = array();
-		$id_remap  = array();
+		$id_remap = array();
 
 		foreach (array_unique($staging_urls) as $remote_url) {
-			$filename            = basename(wp_parse_url($remote_url, PHP_URL_PATH));
+			$filename = basename(wp_parse_url($remote_url, PHP_URL_PATH));
 			$local_attachment_id = $this->pagemorph_get_attachment_id_by_filename($filename);
 
 			if (!$local_attachment_id) {
@@ -306,7 +368,7 @@ class PageMorph_Builder_Migrator
 
 			if (!is_wp_error($local_attachment_id) && $local_attachment_id) {
 				$url_remap[$remote_url] = wp_get_attachment_url($local_attachment_id);
-				$id_remap[$remote_url]  = (int) $local_attachment_id;
+				$id_remap[$remote_url] = (int) $local_attachment_id;
 			}
 		}
 
@@ -364,7 +426,7 @@ class PageMorph_Builder_Migrator
 			if (is_array($value)) {
 				// Update Elementor media object in-place, then recurse for any nested structure.
 				if (isset($value['url']) && is_string($value['url']) && isset($url_remap[$value['url']])) {
-					$old_url    = $value['url'];
+					$old_url = $value['url'];
 					$value['url'] = $url_remap[$old_url];
 					if (array_key_exists('id', $value) && isset($id_remap[$old_url])) {
 						$value['id'] = $id_remap[$old_url];
