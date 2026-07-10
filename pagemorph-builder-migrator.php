@@ -176,7 +176,7 @@ class PageMorph_Builder_Migrator
 		$app_password = sanitize_text_field(wp_unslash($_POST['app_password'] ?? ''));
 		$staging_id = absint(wp_unslash($_POST['staging_id'] ?? 0));
 
-		if (!$staging_url || !$username || !$app_password || !$staging_id) {
+		if (!$staging_url || !$username || !$app_password || !$staging_id || !$local_id) {
 			wp_send_json_error(array('message' => __('Missing parameters.', 'pagemorph-builder-migrator')));
 		}
 
@@ -358,6 +358,32 @@ class PageMorph_Builder_Migrator
 		$url_remap = array();
 		$id_remap = array();
 
+		// Add filters to temporarily allow SVG files during the layout media sideloading process
+		$svg_upload_mimes = function ($mimes) {
+			$mimes['svg'] = 'image/svg+xml';
+			$mimes['svgz'] = 'image/svg+xml';
+			return $mimes;
+		};
+
+		$svg_sideload_extensions = function ($allowed_extensions) {
+			$allowed_extensions[] = 'svg';
+			$allowed_extensions[] = 'svgz';
+			return $allowed_extensions;
+		};
+
+		$svg_check_filetype_and_ext = function ($data, $file, $filename, $mimes) {
+			$filetype = wp_check_filetype($filename, $mimes);
+			if ('svg' === $filetype['ext'] || 'svgz' === $filetype['ext']) {
+				$data['ext'] = $filetype['ext'];
+				$data['type'] = 'image/svg+xml';
+			}
+			return $data;
+		};
+
+		add_filter('upload_mimes', $svg_upload_mimes);
+		add_filter('image_sideload_extensions', $svg_sideload_extensions);
+		add_filter('wp_check_filetype_and_ext', $svg_check_filetype_and_ext, 10, 4);
+
 		foreach (array_unique($staging_urls) as $remote_url) {
 			$filename = basename(wp_parse_url($remote_url, PHP_URL_PATH));
 			$local_attachment_id = $this->pagemorph_get_attachment_id_by_filename($filename);
@@ -371,6 +397,11 @@ class PageMorph_Builder_Migrator
 				$id_remap[$remote_url] = (int) $local_attachment_id;
 			}
 		}
+
+		// Remove the temporary filters to restore standard security policies
+		remove_filter('upload_mimes', $svg_upload_mimes);
+		remove_filter('image_sideload_extensions', $svg_sideload_extensions);
+		remove_filter('wp_check_filetype_and_ext', $svg_check_filetype_and_ext, 10);
 
 		if (empty($url_remap)) {
 			return $elementor_json_string;
