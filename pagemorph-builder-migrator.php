@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       PageMorph Builder Migrator
  * Plugin URI:        https://wordpress.org/plugins/pagemorph-builder-migrator/
- * Description:       Securely pulls Elementor layouts from a staging site into an existing live page built with WPBakery via the REST API. Automatically deactivates WPBakery data on the page, purges legacy shortcodes, sideloads media, and preserves RankMath SEO metadata completely untouched.
+ * Description:       Securely pulls Elementor layouts from a staging site into an existing live page via the REST API. Detects and cleans up the page's previous builder (WPBakery, Divi, or Beaver Builder), purges legacy shortcodes, sideloads media, and preserves RankMath SEO metadata completely untouched.
  * Version:           1.0.2
  * Author:            Alkesh Miyani
  * Author URI:        https://miyanialkesh7.com
@@ -25,6 +25,56 @@ class PageMorph_Builder_Migrator
 
 	/** Populated by pagemorph_sideload_layout_media(); used to patch the Elementor CSS file. */
 	private $url_remap = array();
+
+	/**
+	 * Registry of the legacy page builders this plugin knows how to detect and clean up
+	 * on the live post before the new Elementor layout is applied.
+	 *
+	 * Each entry lists the postmeta keys that mark a page as built with that builder
+	 * (used for auto-detection and for cleanup) plus a human-readable label for the UI.
+	 */
+	private function pagemorph_get_supported_builders()
+	{
+		return array(
+			'wpbakery' => array(
+				'label' => __('WPBakery Page Builder', 'pagemorph-builder-migrator'),
+				'detect_meta_keys' => array('_wpb_vc_js_status'),
+				'cleanup_meta_keys' => array('_wpb_vc_js_status', 'vc_teaser'),
+			),
+			'divi' => array(
+				'label' => __('Divi Builder', 'pagemorph-builder-migrator'),
+				'detect_meta_keys' => array('_et_pb_use_builder'),
+				'cleanup_meta_keys' => array('_et_pb_use_builder', '_et_pb_old_content', '_et_builder_version', '_et_pb_page_layout'),
+			),
+			'beaver-builder' => array(
+				'label' => __('Beaver Builder', 'pagemorph-builder-migrator'),
+				'detect_meta_keys' => array('_fl_builder_enabled'),
+				'cleanup_meta_keys' => array('_fl_builder_enabled', '_fl_builder_data', '_fl_builder_draft', '_fl_builder_data_settings'),
+			),
+			'none' => array(
+				'label' => __('None / Classic Editor (skip cleanup)', 'pagemorph-builder-migrator'),
+				'detect_meta_keys' => array(),
+				'cleanup_meta_keys' => array(),
+			),
+		);
+	}
+
+	/**
+	 * Guess which legacy builder built the live post, based on its postmeta.
+	 * Falls back to 'none' when no known builder marker is present.
+	 */
+	private function pagemorph_detect_source_builder($post_id)
+	{
+		foreach ($this->pagemorph_get_supported_builders() as $builder_key => $builder) {
+			foreach ($builder['detect_meta_keys'] as $meta_key) {
+				if ('' !== (string) get_post_meta($post_id, $meta_key, true)) {
+					return $builder_key;
+				}
+			}
+		}
+
+		return 'none';
+	}
 
 	public function __construct()
 	{
@@ -64,7 +114,7 @@ class PageMorph_Builder_Migrator
 		?>
 		<div class="pagemorph-meta-box-wrapper">
 			<p style="color: #d63638; font-weight: bold; font-size: 12px; border-left: 3px solid #d63638; padding-left: 5px;">
-				<?php esc_html_e('Ideal for moving from WPBakery to Elementor without losing RankMath data.', 'pagemorph-builder-migrator'); ?>
+				<?php esc_html_e('Ideal for moving from WPBakery, Divi, or Beaver Builder to Elementor without losing RankMath data.', 'pagemorph-builder-migrator'); ?>
 			</p>
 			<p>
 				<label
@@ -89,10 +139,22 @@ class PageMorph_Builder_Migrator
 					for="pagemorph_staging_post_id"><strong><?php esc_html_e('Staging Post ID (Elementor):', 'pagemorph-builder-migrator'); ?></strong></label>
 				<input type="number" id="pagemorph_staging_post_id" class="all-options" min="1" placeholder="45" value="" />
 			</p>
+			<p>
+				<label
+					for="pagemorph_source_builder"><strong><?php esc_html_e('Live Page Builder to Clean Up:', 'pagemorph-builder-migrator'); ?></strong></label>
+				<select id="pagemorph_source_builder" class="large-text">
+					<option value="auto"><?php esc_html_e('Auto-detect', 'pagemorph-builder-migrator'); ?></option>
+					<?php foreach ($this->pagemorph_get_supported_builders() as $builder_key => $builder) : ?>
+						<option value="<?php echo esc_attr($builder_key); ?>"><?php echo esc_html($builder['label']); ?></option>
+					<?php endforeach; ?>
+				</select>
+				<span
+					class="description"><?php esc_html_e('Which legacy builder data to remove from this live page before applying the new Elementor layout.', 'pagemorph-builder-migrator'); ?></span>
+			</p>
 			<hr />
 			<button type="button" id="pagemorph_pull_btn" class="button button-primary button-large"
 				style="width:100%; text-align:center;">
-				<?php esc_html_e('Migrate Layout & Clear WPBakery', 'pagemorph-builder-migrator'); ?>
+				<?php esc_html_e('Migrate Layout & Clear Legacy Builder Data', 'pagemorph-builder-migrator'); ?>
 			</button>
 			<div id="pagemorph_status_message" style="margin-top:10px; font-weight:bold;"></div>
 		</div>
@@ -137,10 +199,10 @@ class PageMorph_Builder_Migrator
 				'postId' => absint($post->ID),
 				'i18n' => array(
 					'fillFields' => __('Please fill out all staging credentials and the Post ID.', 'pagemorph-builder-migrator'),
-					'confirmPrompt' => __('Warning: This will overwrite your live layout, erase WPBakery settings for this post, and apply the Elementor design. RankMath SEO metadata is safely preserved. Proceed?', 'pagemorph-builder-migrator'),
-					'purging' => __('Purging WPBakery & Overwriting...', 'pagemorph-builder-migrator'),
+					'confirmPrompt' => __('Warning: This will overwrite your live layout, erase the selected legacy builder\'s settings for this post, and apply the Elementor design. RankMath SEO metadata is safely preserved. Proceed?', 'pagemorph-builder-migrator'),
+					'purging' => __('Clearing Legacy Builder Data & Overwriting...', 'pagemorph-builder-migrator'),
 					'connecting' => __('Connecting to staging site API...', 'pagemorph-builder-migrator'),
-					'migrateBtn' => __('Migrate Layout & Clear WPBakery', 'pagemorph-builder-migrator'),
+					'migrateBtn' => __('Migrate Layout & Clear Legacy Builder Data', 'pagemorph-builder-migrator'),
 					'errorPrefix' => __('Error: ', 'pagemorph-builder-migrator'),
 					'unknownError' => __('An unknown execution error occurred.', 'pagemorph-builder-migrator'),
 				),
@@ -175,6 +237,12 @@ class PageMorph_Builder_Migrator
 		$username = sanitize_text_field(wp_unslash($_POST['app_username'] ?? ''));
 		$app_password = sanitize_text_field(wp_unslash($_POST['app_password'] ?? ''));
 		$staging_id = absint(wp_unslash($_POST['staging_id'] ?? 0));
+
+		$supported_builders = $this->pagemorph_get_supported_builders();
+		$requested_builder = sanitize_key(wp_unslash($_POST['source_builder'] ?? 'auto'));
+		if ('auto' !== $requested_builder && !isset($supported_builders[$requested_builder])) {
+			wp_send_json_error(array('message' => __('Unrecognized source builder selection.', 'pagemorph-builder-migrator')));
+		}
 
 		if (!$staging_url || !$username || !$app_password || !$staging_id || !$local_id) {
 			wp_send_json_error(array('message' => __('Missing parameters.', 'pagemorph-builder-migrator')));
@@ -255,9 +323,17 @@ class PageMorph_Builder_Migrator
 		// Create an automated local revision backup before modification for data safety
 		wp_save_post_revision($local_id);
 
-		// 1. CLEAN UP WPBAKERY META KEYS ON LIVE
-		delete_post_meta($local_id, '_wpb_vc_js_status');
-		delete_post_meta($local_id, 'vc_teaser');
+		// 1. CLEAN UP THE LEGACY PAGE BUILDER'S META KEYS ON LIVE.
+		// Leaves rank_math_ fields (and every other builder's data) completely untouched.
+		$source_builder = ('auto' === $requested_builder)
+			? $this->pagemorph_detect_source_builder($local_id)
+			: $requested_builder;
+
+		if (isset($supported_builders[$source_builder])) {
+			foreach ($supported_builders[$source_builder]['cleanup_meta_keys'] as $meta_key) {
+				delete_post_meta($local_id, $meta_key);
+			}
+		}
 
 		// 2. SET UP NEW ELEMENTOR PARAMETERS ON LIVE
 		update_post_meta($local_id, '_elementor_data', wp_slash($updated_elementor_data));
@@ -271,8 +347,8 @@ class PageMorph_Builder_Migrator
 			update_post_meta($local_id, '_wp_page_template', 'elementor_header_footer');
 		}
 
-		// 3. PURGE THE OLD WPBAKERY SHORTCODES FROM MAIN CONTENT STREAM
-		// Leaves rank_math_ fields completely untouched in wp_postmeta table.
+		// 3. REPLACE THE MAIN CONTENT STREAM WITH THE STAGING CONTENT
+		// (purges old shortcodes/markup from whichever builder previously owned this content).
 		$staging_content = $data['content']['raw'] ?? $data['content']['rendered'] ?? '';
 		wp_update_post(array(
 			'ID' => $local_id,
@@ -283,7 +359,7 @@ class PageMorph_Builder_Migrator
 		// are correct immediately — no on-demand regeneration needed for the first visitor.
 		$this->pagemorph_patch_elementor_css($local_id);
 
-		wp_send_json_success(array('message' => __('Success! WPBakery data cleared, new Elementor layout synced, and RankMath safely preserved. Reloading...', 'pagemorph-builder-migrator')));
+		wp_send_json_success(array('message' => __('Success! Legacy builder data cleared, new Elementor layout synced, and RankMath safely preserved. Reloading...', 'pagemorph-builder-migrator')));
 	}
 
 	/**

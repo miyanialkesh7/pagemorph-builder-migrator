@@ -6,6 +6,7 @@ jQuery( document ).ready( function ( $ ) {
 		var appUsername   = $( '#pagemorph_app_username' ).val();
 		var appPassword   = $( '#pagemorph_app_password' ).val();
 		var stagingPostId = $( '#pagemorph_staging_post_id' ).val();
+		var sourceBuilder = $( '#pagemorph_source_builder' ).val();
 		var localPostId   = pageMorphSyncData.postId;
 		var nonce         = $( '#pagemorph_pull_nonce' ).val();
 
@@ -28,9 +29,10 @@ jQuery( document ).ready( function ( $ ) {
 			staging_url:  stagingUrl,
 			app_username: appUsername,
 			app_password: appPassword,
-			staging_id:   stagingPostId,
-			local_id:     localPostId,
-			_ajax_nonce:  nonce,
+			staging_id:      stagingPostId,
+			local_id:        localPostId,
+			source_builder:  sourceBuilder,
+			_ajax_nonce:     nonce,
 		} )
 		.done( function ( response ) {
 			$status.css( 'color', 'green' ).text( response.message );
