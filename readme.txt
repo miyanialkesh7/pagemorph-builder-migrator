@@ -63,6 +63,9 @@ You do not need to install this plugin on your staging site. Simply go to your S
 
 == Changelog ==
 
+= 1.0.3 =
+* Feature: The live page's legacy builder to clean up is now detected automatically (or chosen manually) instead of being hardcoded to WPBakery. Divi and Beaver Builder are now supported alongside WPBakery.
+
 = 1.0.2 =
 Release date: June 29th, 2026
 
