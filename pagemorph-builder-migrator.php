@@ -180,6 +180,10 @@ class PageMorph_Builder_Migrator
 			wp_send_json_error(array('message' => __('Missing parameters.', 'pagemorph-builder-migrator')));
 		}
 
+		if (!wp_http_validate_url($staging_url)) {
+			wp_send_json_error(array('message' => __('The staging site URL is not a valid, reachable HTTP(S) address.', 'pagemorph-builder-migrator')));
+		}
+
 		$rest_base = !empty($post_type_object->rest_base) ? $post_type_object->rest_base : $post_type;
 
 		$rest_bases_to_try = array($rest_base);
